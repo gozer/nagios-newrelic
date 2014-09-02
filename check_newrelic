@@ -1,0 +1,101 @@
+#!/usr/bin/env perl
+use strict;
+
+our $VERSION = "0.01";
+
+use constant RPM_URL => "https://api.newrelic.com/v2";
+
+use Getopt::Long;
+use JSON;
+use Data::Dumper;
+
+my $verbose = 0;
+my $key;
+my $application;
+my $appid;
+my $metric;
+my ($warning, $critical);
+
+GetOptions(
+  "verbose!"      => \$verbose,
+  "key=s"   	  => \$key,
+  "metric=s"	  => \$metric,
+  "critical=i"    => \$critical,
+  "warning=i"     => \$warning,
+  "application=s" => \$application,
+);
+
+use LWP::UserAgent;
+my $ua = LWP::UserAgent->new(
+  agent   => "check_newrelic/$VERSION",
+  timeout => 5,
+);
+$ua->default_header('X-Api-Key', $key);
+
+my $resp = $ua->get(RPM_URL . "/applications.json");
+$resp = decode_json($resp->content);
+
+if (not defined $application) {
+  warn "Please pick an application:";
+}
+
+foreach my $app ( @{ $resp->{applications} } ) {
+  if (not defined $application) {
+    print "\t- $app->{name} ($app->{id})\n";
+  }
+  
+  if ($application eq $app->{name}) {
+    $appid = $app->{id};
+  }
+}
+
+my $resp = $ua->get(RPM_URL . "/applications/$appid.json");
+$resp = decode_json($resp->content);
+
+my $appinfo = $resp->{application};
+my $health = $appinfo->{health_status};
+my $appsum = $appinfo->{application_summary};
+print Dumper($appinfo->{application_summary});
+
+my $metric_value;
+
+if (defined $metric) {
+  # make sure it exists
+  $metric_value = $appsum->{$metric};
+}
+else {
+  $metric = "app_health";
+  $metric_value = $health;
+}
+
+print STDERR "Metric $metric is at $metric_value (W:$warning C:$critical)\n";
+
+
+
+
+
+__END__
+
+
+$VAR1 = {
+          'error_rate' => 0,
+          'response_time' => '16.9',
+          'apdex_target' => '0.5',
+          'apdex_score' => '1',
+          'throughput' => 2230
+        };
+
+
+
+                             'health_status' => 'green',
+                             'last_reported_at' => '2014-09-02T17:15:57+00:00',
+                             'language' => 'php',
+                             'id' => 2621838,
+                             'application_summary' => {
+                                                        'throughput' => 5770,
+                                                        'apdex_target' => '0.5',
+                                                        'response_time' => '14.1',
+                                                        'error_rate' => 0,
+                                                        'apdex_score' => '1'
+                                                      },
+
